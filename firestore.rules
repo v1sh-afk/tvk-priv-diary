@@ -1,0 +1,77 @@
+// TVK — Firestore Security Rules (reference document)
+//
+// This project is implemented on Supabase (the backend available in this Bolt
+// environment), not Firebase. The equivalent access control is enforced by
+// Supabase Row Level Security policies in the database migration.
+//
+// This file is provided as the Firebase-equivalent rules document requested in
+// the original specification. If you later migrate to Firebase, replace the
+// <UID_V> and <UID_T> placeholders with the two real Firebase auth UIDs, then
+// deploy with `firebase deploy --only firestore:rules`.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // === REPLACE THESE PLACEHOLDERS ===
+    // UID for herman -> identity V
+    // UID for hisgirl -> identity T
+    function isApprovedUser() {
+      return request.auth != null &&
+        (request.auth.uid == '<UID_V>' || request.auth.uid == '<UID_T>');
+    }
+
+    function validDiaryFields() {
+      return request.resource.data.title is string
+        && request.resource.data.content is string
+        && request.resource.data.entry_date is string
+        && request.resource.data.author_identity in ['V', 'T'];
+    }
+
+    function authorUidImmutable() {
+      return request.resource.data.author_uid == resource.data.author_uid;
+    }
+
+    function authorIdentityImmutable() {
+      return request.resource.data.author_identity == resource.data.author_identity;
+    }
+
+    match /diaryEntries/{entryId} {
+      allow read: if isApprovedUser();
+
+      allow create: if isApprovedUser()
+        && validDiaryFields()
+        && request.resource.data.author_uid == request.auth.uid;
+
+      allow update: if isApprovedUser()
+        && validDiaryFields()
+        && authorUidImmutable()
+        && authorIdentityImmutable();
+
+      allow delete: if isApprovedUser();
+    }
+
+    match /stickyNotes/{noteId} {
+      allow read: if isApprovedUser();
+
+      allow create: if isApprovedUser()
+        && request.resource.data.content is string
+        && request.resource.data.color is string
+        && request.resource.data.author_identity in ['V', 'T']
+        && request.resource.data.author_uid == request.auth.uid;
+
+      allow update: if isApprovedUser()
+        && request.resource.data.content is string
+        && request.resource.data.color is string
+        && request.resource.data.author_identity in ['V', 'T']
+        && authorUidImmutable()
+        && authorIdentityImmutable();
+
+      allow delete: if isApprovedUser();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
